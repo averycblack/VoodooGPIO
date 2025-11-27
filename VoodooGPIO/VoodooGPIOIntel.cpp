@@ -320,7 +320,7 @@ bool VoodooGPIOIntel::intel_gpio_irq_set_type(unsigned pin, unsigned type) {
 
     value = readl(reg);
 
-    value &= ~(PADCFG0_RXEVCFG_MASK | PADCFG0_RXINV);
+    value &= ~(PADCFG0_RXEVCFG_MASK | PADCFG0_RXINV | PADCFG0_PMODE_MASK);
 
     if ((type & IRQ_TYPE_EDGE_BOTH) == IRQ_TYPE_EDGE_BOTH) {
         value |= PADCFG0_RXEVCFG_EDGE_BOTH << PADCFG0_RXEVCFG_SHIFT;
@@ -712,15 +712,7 @@ bool VoodooGPIOIntel::start(IOService *provider) {
 
     isInterruptBusy = false;
     controllerIsAwake = true;
-    
-    IOReturn success = provider->registerInterrupt(0, this, OSMemberFunctionCast(IOInterruptAction, this, &VoodooGPIOIntel::InterruptOccurred));
-    if (success != kIOReturnSuccess) {
-        IOLog("%s::Error registering interrupt", getName());
-        stop(provider);
-        return false;
-    }
-    
-    provider->enableInterrupt(0);
+
     registerService();
 
     // Declare an array of two IOPMPowerState structures (kMyNumberOfStates = 2).
@@ -772,10 +764,15 @@ void VoodooGPIOIntel::stop(IOService *provider) {
         IOSafeDeleteNULL(communities[i].pinInterruptRefcons, void*, communities[i].npins);
         OSSafeReleaseNULL(communities[i].mmap);
     }
-    
-    getProvider()->unregisterInterrupt(0);
-    
-    OSSafeReleaseNULL(this->registered_pin_list);
+
+    if (registered_pin_list) {
+        if (registered_pin_list->getCount() > 0) {
+            IOLog("%s::Interrupt has not been unregistered by client\n", getName());
+            getProvider()->unregisterInterrupt(0);
+        }
+        OSSafeReleaseNULL(this->registered_pin_list);
+    }
+
     OSSafeReleaseNULL(workLoop);
 
     PMstop();
@@ -941,6 +938,9 @@ IOReturn VoodooGPIOIntel::registerInterrupt(int pin, OSObject *target, IOInterru
 
     IOLog("%s::Successfully registered hardware pin 0x%02X for GPIO IRQ pin 0x%02X\n", getName(), hw_pin, pin);
 
+    if (registered_pin_list->getCount() == 1) {
+        return getProvider()->registerInterrupt(0, this, OSMemberFunctionCast(IOInterruptAction, this, &VoodooGPIOIntel::InterruptOccurred));
+    }
     return kIOReturnSuccess;
 }
 
@@ -988,7 +988,7 @@ IOReturn VoodooGPIOIntel::enableInterrupt(int pin) {
     unsigned communityidx = hw_pin - community->pin_base;
     if (community->pinInterruptActionOwners[communityidx]) {
         intel_gpio_irq_mask_unmask(hw_pin, false);
-        return kIOReturnSuccess;
+        return getProvider()->enableInterrupt(0);
     }
     return kIOReturnNoInterrupt;
 }
@@ -1002,7 +1002,7 @@ IOReturn VoodooGPIOIntel::disableInterrupt(int pin) {
         return kIOReturnNoInterrupt;
 
     intel_gpio_irq_mask_unmask(hw_pin, true);
-    return kIOReturnSuccess;
+    return getProvider()->disableInterrupt(0);
 }
 
 /**
