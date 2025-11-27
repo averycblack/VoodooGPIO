@@ -320,6 +320,7 @@ bool VoodooGPIOIntel::intel_gpio_irq_set_type(unsigned pin, unsigned type) {
 
     value = readl(reg);
 
+    /* Pmode of zero makes sure pin is muxed into the GPIO controller logic */
     value &= ~(PADCFG0_RXEVCFG_MASK | PADCFG0_RXINV | PADCFG0_PMODE_MASK);
 
     if ((type & IRQ_TYPE_EDGE_BOTH) == IRQ_TYPE_EDGE_BOTH) {
@@ -335,9 +336,6 @@ bool VoodooGPIOIntel::intel_gpio_irq_set_type(unsigned pin, unsigned type) {
     } else {
         value |= PADCFG0_RXEVCFG_DISABLED << PADCFG0_RXEVCFG_SHIFT;
     }
-
-    /* Pmode of zero makes sure pin is muxed into the GPIO controller logic */
-    value &= ~PADCFG0_PMODE_MASK;
     
     writel(value, reg);
     return true;
