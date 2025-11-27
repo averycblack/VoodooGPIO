@@ -336,7 +336,7 @@ bool VoodooGPIOIntel::intel_gpio_irq_set_type(unsigned pin, unsigned type) {
     } else {
         value |= PADCFG0_RXEVCFG_DISABLED << PADCFG0_RXEVCFG_SHIFT;
     }
-    
+
     writel(value, reg);
     return true;
 }
